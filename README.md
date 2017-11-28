@@ -3,7 +3,7 @@ migrations for phalcon
 
 ### Usage: Generate a Migrate
 
-     php migrate
+     php migrate --install
 
 ### Usage: Run a Migrate
 
