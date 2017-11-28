@@ -21,12 +21,7 @@ try {
 
     $migrateDir = $config->application->migrationsDir;
 
-    if (!checkInstall($db) && $argv[1] != '--install') {
-        echo <<<EOF
-\033[0;0;32mPlease run: php migrate --install\033[0m \n
-EOF;
-        return false;
-    }
+
     if ($argc > 1) {
         switch ($argv[1]) {
             case '--h':
@@ -77,6 +72,13 @@ EOF;
 
 function generate($db, $type, $table, $migrateDir)
 {
+    if (!checkInstall($db) && $type != '--install') {
+        echo <<<EOF
+\033[0;0;32mPlease run: php migrate --install\033[0m \n
+EOF;
+        return false;
+    }
+
     $fileName = date('Y_m_d_') . time() . '_' . $type . '_' . $table . '_table.php';
     $className = ucfirst($type) . ucfirst($table) . 'TableMigration';
     switch ($type) {
