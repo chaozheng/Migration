@@ -1,15 +1,15 @@
 # Phalcon Migration
 migrations for phalcon
 
-###Usage: Generate a Migrate
+### Usage: Generate a Migrate
 
      php migrate
 
-###Usage: Run a Migrate
+### Usage: Run a Migrate
 
      php migrate run
 
-###Options:
+### Options:
 	
 	  --run Execute the migration
 
