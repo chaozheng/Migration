@@ -1,0 +1,269 @@
+<?php
+
+use Phalcon\Di\FactoryDefault;
+
+error_reporting(E_ALL);
+
+define('BASE_PATH', dirname(__FILE__));
+define('APP_PATH', BASE_PATH . '/app');
+
+
+try {
+
+    $di = new FactoryDefault();
+
+    include APP_PATH . "/config/config.php";
+
+    include APP_PATH . '/config/services.php';
+
+    $config = $di->getConfig();
+    $db = $di->getShared('db');
+
+    $migrateDir = $config->application->migrationsDir;
+
+    if (!checkInstall($db) && $argv[1] != '--install') {
+        echo <<<EOF
+\033[0;0;32mPlease run: php migrate --install\033[0m \n
+EOF;
+        return false;
+    }
+    if ($argc > 1) {
+        switch ($argv[1]) {
+            case '--h':
+            case '--help':
+                showHelp();
+                break;
+            case '--create':
+                generate($db, 'create', $argv[2], $migrateDir);
+                break;
+            case '--update':
+                generate($db, 'update', $argv[2], $migrateDir);
+                break;
+            case '--delete':
+                generate($db, 'delete', $argv[2], $migrateDir);
+                break;
+            case '--install':
+                installMigrate($db);
+                break;
+            case '--run':
+                run($db, $migrateDir);
+                break;
+        }
+    } else {
+        showHelp();
+    }
+
+
+} catch (\Exception $e) {
+    echo $e->getMessage() . '\n';
+    echo '<pre>' . $e->getTraceAsString() . '</pre>';
+}
+
+function showHelp()
+{
+    echo <<<EOF
+    Usage: Generate a Migrate
+    \033[0;0;32m php migrate\033[0m\n
+    Usage: Run a Migrate
+    \033[0;0;32m php migrate run\033[0m\n
+    Options:
+        \033[0;0;32m --create ? Generate a Migrate File,ex: php migrate --create users\033[0m \n
+        \033[0;0;32m --update ? Generate a Migrate File,ex: php migrate --update users\033[0m \n
+        \033[0;0;32m --delete ? Generate a Migrate File,ex: php migrate --delete users\033[0m \n
+        \033[0;0;32m --install Create the migration repository\033[0m \n
+        \033[0;0;32m --help or -h Display this help message\033[0m \n
+EOF;
+}
+
+function generate($db, $type, $table, $migrateDir)
+{
+    $fileName = date('Y_m_d_') . time() . '_' . $type . '_' . $table . '_table.php';
+    $className = ucfirst($type) . ucfirst($table) . 'TableMigration';
+    switch ($type) {
+        case 'create':
+            $html = createTemplate($table, $className);
+            @file_put_contents($migrateDir . $fileName, $html);
+            break;
+        case 'update':
+        case 'delete':
+            $html = updateTemplate($table, $className);
+            @file_put_contents($migrateDir . $fileName, $html);
+            break;
+    }
+    echo $fileName;
+}
+
+function createTemplate($tableName, $className)
+{
+    return <<<EOF
+<?php
+
+use Phalcon\Db\Column;
+use Phalcon\Db\Index;
+
+class {$className}
+{
+    /**
+     * Define the table structure
+     *
+     * @return void
+     */
+    public function morph(\$db)
+    {
+        \$db->createTable('{$tableName}','', [
+                'columns' => [
+                    new Column(
+                        'id',
+                        [
+                            'type' => Column::TYPE_INTEGER,
+                            'unsigned' => true,
+                            'notNull' => true,
+                            'autoIncrement' => true,
+                            'size' => 10,
+                            'first' => true
+                        ]
+                    ),
+
+                ],
+                'indexes' => [
+                    new Index('PRIMARY', ['id'], 'PRIMARY')
+                ],
+                'options' => [
+                    'TABLE_TYPE' => 'BASE TABLE',
+                    'AUTO_INCREMENT' => '1',
+                    'ENGINE' => 'InnoDB',
+                    'TABLE_COLLATION' => 'utf8mb4_unicode_ci'
+                ],
+            ]
+        );
+    }
+
+    /**
+     * Run the migrations
+     *
+     * @return void
+     */
+    public function up(\$db)
+    {
+        \$this->morph(\$db);
+    }
+
+    /**
+     * Reverse the migrations
+     *
+     * @return void
+     */
+    public function down(\$db)
+    {
+
+    }
+
+}
+EOF;
+
+}
+
+function updateTemplate($tableName, $className)
+{
+    return <<<EOF
+<?php
+
+use Phalcon\Db\Column;
+use Phalcon\Db\Index;
+
+class {$className}
+{
+    /**
+     * Run the migrations
+     *
+     * @return void
+     */
+    public function up(\$db)
+    {
+    }
+
+    /**
+     * Reverse the migrations
+     *
+     * @return void
+     */
+    public function down(\$db)
+    {
+
+    }
+
+}
+EOF;
+
+}
+
+function checkInstall($db)
+{
+    return $db->tableExists('migrations');
+}
+
+function installMigrate($db)
+{
+    if (!checkInstall($db)) {
+        $dbQUery = <<<QR
+CREATE TABLE `migrations` (
+	`migration` VARCHAR(255) NOT NULL COLLATE 'utf8_unicode_ci',
+	`batch` INT(11) NOT NULL
+)
+COLLATE='utf8_unicode_ci'
+ENGINE=InnoDB
+;
+QR;
+        return $db->query($dbQUery);
+
+    }
+
+    return true;
+}
+
+function run($db, $migrateDir)
+{
+    $lastBatch = $db->fetchOne("SELECT * FROM migrations ORDER BY batch DESC");
+
+    $batch = 1;
+    if (!empty($lastBatch)) {
+        $batch = $lastBatch['batch'] * 1 + 1;
+    }
+
+    $migrations = $db->fetchAll("SELECT migration FROM migrations");
+    $files = scandir($migrateDir);
+
+    $migrates = [];
+    if (count($files) > 2) {
+        foreach ($files as $file) {
+            if ($file != '.' && $file != '..')
+            {
+                $migrates[] = $file;
+            }
+        }
+
+        $migrates = array_flip($migrates);
+        if(!empty($migrations)) {
+            foreach($migrations as $item)
+            {
+                unset($migrates[$item['migration']]);
+            }
+        }
+
+        if( count($migrates) > 0 ) {
+            foreach ($migrates as $key => $migrate) {
+                $file = explode('_',$key);
+                include $migrateDir.$key;
+                $className = ucfirst($file[4]).ucfirst($file[5]).'TableMigration';
+
+                $instance = new $className();
+                $instance->up($db);
+                $db->insert('migrations',
+                    [$key,$batch],
+                    ['migration','batch']);
+            }
+        }
+    }
+
+
+}
