@@ -7,7 +7,7 @@ migrations for phalcon
 
 ### Usage: Run a Migrate
 
-     php migrate run
+     php migrate --run
 
 ### Options:
 	
